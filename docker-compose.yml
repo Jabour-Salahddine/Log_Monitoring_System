@@ -1,0 +1,98 @@
+#version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      # Port interne pour les autres conteneurs Docker (Debezium)
+      - "9092:9092"
+      # Port externe pour les applications sur votre machine hôte (Celery bridge, FastAPI si besoin, générateur si via Kafka)
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # IMPORTANT: On expose Kafka sur 'kafka:9092' pour les conteneurs internes
+      # ET sur 'localhost:29092' pour votre machine hôte
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0 # Assurez la compatibilité si vous changez
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m -Djava.net.preferIPv4Stack=true #- ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - network.host=0.0.0.0 # Écoute sur toutes les interfaces (ajouter pour regler le problème de elastic)
+      - xpack.security.enabled=false # Simplicité pour le dev (NE PAS FAIRE EN PROD)
+    ports:
+      # Port externe pour votre API FastAPI et vos outils de visualisation (Kibana)
+      - "9200:9200"
+      # Port interne (moins pertinent ici)
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ulimits: # Important pour Elasticsearch
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  debezium:
+    image: debezium/connect:2.1 # Assurez la compatibilité
+    container_name: debezium_connect
+    depends_on:
+      - kafka # Dépend de Kafka, mais pas de MySQL car il est externe
+    ports:
+      - "8083:8083" # Port pour configurer le connecteur via API REST
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092 # Kafka est accessible via son nom de service Docker
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1 # Dev uniquement
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1 # Dev uniquement
+      STATUS_STORAGE_REPLICATION_FACTOR: 1 # Dev uniquement
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_JSON_SCHEMAS_ENABLE: 'false' # Simplifie les messages JSON
+      # IMPORTANT: Permet au conteneur Debezium d'accéder aux services sur la machine hôte
+      # Utilisez 'host-gateway' pour une résolution DNS spéciale
+      # Nécessite Docker 20.10+
+      EXTRA_HOSTS: "host.docker.internal:host-gateway" # Pourrait nécessiter ajustement selon OS/Version Docker
+  
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+  
+  redis:
+    image: redis:alpine
+    container_name: redis_cache
+    ports:
+      # Port externe pour Celery (qui tourne sur l'hôte)
+      - "6379:6379"
+
+volumes:
+  es_data: # Volume persistant pour les données Elasticsearch
+

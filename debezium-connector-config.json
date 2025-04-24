@@ -1,0 +1,30 @@
+{
+    "name": "xampp-mysql-log-connector",
+    "config": {
+      "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  
+      "database.hostname": "host.docker.internal",
+      "database.port": "3306",
+      "database.user": "debezium",
+      "database.password": "123456",
+  
+      "database.server.id": "184055",
+      "database.server.name": "xampp_mysql_server",
+      "database.include.list": "appdb",
+      "table.include.list": "appdb.app_logs",
+  
+      "database.history.kafka.bootstrap.servers": "kafka:9092",
+      "database.history.kafka.topic": "schema-changes.appdb",
+
+      
+      "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+      "schema.history.internal.kafka.topic": "schema-changes.appdb",
+     
+  
+      "include.schema.changes": "false",
+      "topic.prefix": "xampp_mysql_server",
+  
+      "snapshot.mode": "initial"
+    }
+  }
+  
