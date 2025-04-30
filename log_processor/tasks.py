@@ -1,3 +1,5 @@
+
+
 # log_processor/tasks.py
 import json
 import datetime
@@ -113,8 +115,10 @@ def process_log_event(self, event_data_bytes):
     #      task_logger.error(f"Task {self.request.id}: Error during Elasticsearch ping check: {ping_err}. Retrying...")
     #      raise self.retry(exc=ping_err, countdown=30)
 
-    try:
+    try:  # bloc principale pour attraper les erreurs lors de taitement : 
         event_data_str = event_data_bytes.decode('utf-8')
+        
+        # Parse la chaîne JSON en objet Python (dict) : 
         message = json.loads(event_data_str)
         payload = message.get('payload')
         if not payload:
@@ -218,3 +222,65 @@ def process_log_event(self, event_data_bytes):
         except self.MaxRetriesExceededError:
              task_logger.critical(f"Task {self.request.id}: Max retries exceeded for critical error. Giving up.")
              return "Failed after max retries (Critical Error)"
+
+             
+
+           # pour faire un simple test : 
+
+'''
+# log_processor/tasks.py
+import logging
+import json
+from .celery_app import app # Importer l'instance Celery DEPUIS celery_app.py
+
+# --- Configuration du logging simple pour cette tâche ---
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logging.basicConfig(level=logging.INFO, format=log_format)
+task_logger = logging.getLogger('celery.tasks.minimal') # Logger spécifique
+
+# --- Tâche Celery Minimale ---
+@app.task(bind=True, name='log_processor.process_log_event', queue='logs')
+def process_log_event(self, event_data_bytes):
+    """
+    Tâche minimale : reçoit les bytes, essaie de décoder, et log.
+    NE FAIT RIEN D'AUTRE (pas d'ES, pas d'autre Redis, pas d'anomalie).
+    """
+    task_id = self.request.id
+    task_logger.info(f"----> TASK {task_id}: Minimal task received raw data.")
+
+    # 1. Vérifier si on a reçu quelque chose
+    if not event_data_bytes:
+        task_logger.warning(f"TASK {task_id}: Received empty data. Skipping.")
+        return "SKIPPED - Empty data"
+
+    task_logger.info(f"TASK {task_id}: Received {len(event_data_bytes)} bytes.")
+
+    # 2. Essayer de décoder les bytes en UTF-8 (commun pour JSON)
+    try:
+        decoded_string = event_data_bytes.decode('utf-8')
+        task_logger.info(f"TASK {task_id}: Successfully decoded UTF-8.")
+        # Optionnel: Essayer de parser en JSON pour voir si c'est valide
+        try:
+            data = json.loads(decoded_string)
+            task_logger.info(f"TASK {task_id}: Successfully parsed JSON. Payload keys: {list(data.get('payload', {}).keys()) if isinstance(data, dict) else 'N/A'}")
+        except json.JSONDecodeError as json_err:
+            task_logger.warning(f"TASK {task_id}: Could not parse decoded string as JSON: {json_err}")
+            task_logger.warning(f"TASK {task_id}: Decoded string starts with: {decoded_string[:200]}...") # Log début de la string
+
+    except UnicodeDecodeError as unicode_err:
+        task_logger.error(f"TASK {task_id}: FAILED to decode bytes as UTF-8: {unicode_err}")
+        task_logger.error(f"TASK {task_id}: Raw bytes (first 100): {event_data_bytes[:100]}")
+        # Ne pas relancer pour ce type d'erreur dans le test minimal
+        return f"FAILED - Unicode Decode Error"
+    except Exception as e:
+        task_logger.error(f"TASK {task_id}: An unexpected error occurred in minimal task: {e}", exc_info=True)
+        # Vous pourriez vouloir relancer ici, mais pour le test, on s'arrête
+        # raise self.retry(exc=e, countdown=10) # Décommenter pour tester la relance
+        return f"FAILED - Unexpected Error: {e}"
+
+    # 3. Si tout s'est bien passé (au moins le décodage)
+    task_logger.info(f"====> TASK {task_id}: Minimal task completed successfully. <====")
+    return f"SUCCESS - Task {task_id} processed minimal data"
+
+# --- Fin du fichier tasks.py ---
+'''

@@ -1,3 +1,5 @@
+
+
 # log_processor/kafka_bridge.py
 import time
 import logging
@@ -122,3 +124,112 @@ def kafka_to_celery_bridge():
 if __name__ == '__main__':
     bridge_logger.info("Running Kafka to Celery Bridge Script...")
     kafka_to_celery_bridge()
+    
+
+
+
+
+
+
+# pour faire un simple test : 
+
+'''
+# log_processor/kafka_bridge.py
+import time
+import logging
+
+from kafka import KafkaConsumer # type: ignore
+
+# Importer la configuration locale
+from .import config
+
+# Importer la TÂCHE spécifique (maintenant simplifiée) depuis tasks.py
+from .tasks import process_log_event
+
+# Configuration du logging
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logging.basicConfig(level=logging.INFO, format=log_format)
+bridge_logger = logging.getLogger('kafka_bridge_minimal')
+
+def kafka_to_celery_bridge():
+    """Lit Kafka et envoie les messages comme tâches à Celery (version de test)."""
+    bridge_logger.info(f"--- Starting Kafka Consumer Bridge (Minimal Test) ---")
+    bridge_logger.info(f"Target Kafka Topic: {config.KAFKA_TOPIC} @ {config.KAFKA_BROKER_URL}")
+    bridge_logger.info(f"Target Celery Task: {process_log_event.name}")
+    bridge_logger.info(f"Target Celery Broker (Implicit via task import): Redis at {config.REDIS_HOST}:{config.REDIS_PORT}")
+    bridge_logger.info(f"-----------------------------------------------------")
+
+    consumer = None
+    message_count = 0
+    send_attempts = 0
+    send_errors = 0
+
+    while True: # Boucle pour retenter la connexion Kafka
+        try:
+            bridge_logger.info("Attempting to connect Kafka consumer...")
+            consumer = KafkaConsumer(
+                config.KAFKA_TOPIC,
+                bootstrap_servers=config.KAFKA_BROKER_URL,
+                group_id='log_processor_bridge_minimal_group_v1', # Nouveau groupe pour reset
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=5000, # Délai d'attente pour les messages
+            )
+            bridge_logger.info(">>> Kafka consumer connected. Waiting for messages...")
+
+            while True: # Boucle principale de consommation
+                try:
+                    for message in consumer:
+                        message_count += 1
+                        if message and message.value:
+                            bridge_logger.info(f"BRIDGE: Received msg (Offset: {message.offset}, Total: {message_count}). Size: {len(message.value)} bytes.")
+
+                            # --- Tentative d'envoi de la tâche ---
+                            bridge_logger.info(f"BRIDGE: Preparing to send task to Celery (Attempt {send_attempts + 1})...")
+                            try:
+                                # *** APPEL CRUCIAL ***
+                                process_log_event.delay(message.value)
+                                send_attempts += 1
+                                bridge_logger.info(f"BRIDGE: SUCCESS! Task sent via .delay().")
+                            except Exception as send_err:
+                                send_attempts += 1
+                                send_errors += 1
+                                bridge_logger.error(f"BRIDGE: !!! FAILED to send task via .delay() (Total Errors: {send_errors}): {send_err}", exc_info=False) # Mettre True pour traceback complet
+                                bridge_logger.error(f"BRIDGE: Check if Redis broker is running and accessible at {config.REDIS_HOST}:{config.REDIS_PORT}")
+                                bridge_logger.error(f"BRIDGE: Check if Celery worker is running and connected.")
+                                bridge_logger.info("BRIDGE: Sleeping for 5 seconds before processing next message (if any)...")
+                                time.sleep(5) # Pause pour éviter de spammer en cas d'erreur persistante
+
+                        elif message:
+                            bridge_logger.warning(f"BRIDGE: Received message with empty value at offset {message.offset}")
+
+                except StopIteration:
+                     # Se produit quand consumer_timeout_ms est atteint sans nouveaux messages
+                     bridge_logger.debug("BRIDGE: No new messages in Kafka poll, continuing to wait...")
+                     continue # Continue la boucle d'attente interne
+                except Exception as inner_loop_err:
+                     bridge_logger.error(f"BRIDGE: Unexpected error in Kafka message processing loop: {inner_loop_err}", exc_info=True)
+                     time.sleep(5) # Pause avant de potentiellement réessayer
+
+        except KeyboardInterrupt:
+            bridge_logger.info("\nCtrl+C received. Stopping Kafka consumer bridge...")
+            break # Sortir de la boucle de reconnexion Kafka
+        except Exception as e:
+            bridge_logger.error(f"BRIDGE: Kafka consumer connection or setup error: {e}. Retrying connection in 15 seconds...", exc_info=True)
+            if consumer:
+                try: consumer.close()
+                except: pass
+            consumer = None
+            time.sleep(15) # Attendre avant de retenter la connexion Kafka
+        finally:
+            bridge_logger.info(">>> Kafka bridge processing loop potentially finished or interrupted.")
+            if consumer:
+                try:
+                    bridge_logger.info("Closing Kafka consumer...")
+                    consumer.close()
+                    bridge_logger.info("Kafka consumer closed.")
+                except Exception as close_err:
+                    bridge_logger.error(f"Error closing Kafka consumer: {close_err}")
+
+if __name__ == '__main__':
+    kafka_to_celery_bridge()
+'''

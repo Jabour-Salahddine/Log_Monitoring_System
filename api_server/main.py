@@ -70,7 +70,7 @@ except Exception as e:
 
 # Créer l'application FastAPI
 app = FastAPI(
-    title="Log Monitoring API (XAMPP Source)",
+    title="Log Monitoring API : Besmilah",
     description="API for querying and analyzing application logs stored in Elasticsearch."
 )
 
@@ -211,13 +211,13 @@ async def search_logs(
                 ]
             }
         },
-        "_source": True
+        "_source": ["@timestamp", "level", "message", "debezium_op"] #True
     }
 
     # --- Ajout dynamique des filtres / requêtes ---
     if level:
         query_body["query"]["bool"]["filter"].append({
-            "term": {"level.keyword": level.upper()} # Assumer mapping avec .keyword
+            "term": {"level": level.upper()} # Assumer mapping avec .keyword
         })
     if term:
         query_body["query"]["bool"]["must"].append({
