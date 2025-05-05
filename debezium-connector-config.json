@@ -24,7 +24,7 @@
       "include.schema.changes": "false",
       "topic.prefix": "xampp_mysql_server",
   
-      "snapshot.mode": "initial"
+      "snapshot.mode": "schema_only"
     }
   }
   

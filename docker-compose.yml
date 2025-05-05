@@ -85,6 +85,11 @@ services:
       - "5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=VOTRE_CLE_SECRETE_DAU_MOINS_32_CARACTERES_1234567890
+      - XPACK_REPORTING_ENCRYPTIONKEY=UNE_AUTRE_CLE_SECRETE_DAU_MOINS_32_CARACTERES_0987654321
+      - XPACK_SECURITY_ENCRYPTIONKEY=ENCORE_UNE_AUTRE_CLE_SECRETE_DAU_MOINS_32_CARACTERES_AZERTY
+   # volumes:
+   #  - ./kibana_config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro  
   
   redis:
     image: redis:alpine
