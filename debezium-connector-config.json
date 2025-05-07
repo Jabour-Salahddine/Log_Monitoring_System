@@ -11,7 +11,9 @@
       "database.server.id": "184055",
       "database.server.name": "xampp_mysql_server",
       "database.include.list": "appdb",
-      "table.include.list": "appdb.app_logs",
+      "table.include.list": "appdb.app_logs,appdb.cart_events",
+      
+      "decimal.handling.mode": "string",
   
       "database.history.kafka.bootstrap.servers": "kafka:9092",
       "database.history.kafka.topic": "schema-changes.appdb",
