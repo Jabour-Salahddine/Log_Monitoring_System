@@ -148,7 +148,7 @@ if __name__ == "__main__":
             
             # Attendre 30 secondes avant le prochain événement
             # Gérer l'interruption pendant le sleep
-            for _ in range(300): # Découper le sleep pour vérifier 'running' plus souvent
+            for _ in range(10): # Découper le sleep pour vérifier 'running' plus souvent
                  if not running: break
                  time.sleep(0.1)
             if not running: break
